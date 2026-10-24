@@ -449,11 +449,52 @@ class MemoryStore:
         if topic:
             card["topic"] = topic[:40]
         card["last_seen"] = time.time()
-        count = card["count"]
-        card["level"] = 2 if count >= 8 else (1 if count >= 3 else 0)
+        card["level"] = level_of(int(card["count"]))
         rel[uid] = card
         self._relations[umo] = rel
         return card
+
+    # ---------- 全局关系（只记熟度，不记内容） ----------
+
+    def _global_file(self) -> str:
+        return os.path.join(self.base, "relations_global.json")
+
+    def load_global(self) -> dict:
+        if "_global" in self._relations:
+            return self._relations["_global"]
+        try:
+            with open(self._global_file(), encoding="utf-8") as fp:
+                data = json.load(fp)
+            rel = data if isinstance(data, dict) else {}
+        except Exception:
+            rel = {}
+        self._relations["_global"] = rel
+        return rel
+
+    def save_global(self) -> None:
+        path = self._global_file()
+        tmp = path + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as fp:
+                json.dump(self._relations.get("_global") or {}, fp, ensure_ascii=False, indent=2)
+            os.replace(tmp, path)
+        except Exception:
+            pass
+
+    def touch_global(self, uid: str, name: str) -> dict:
+        """跨会话累计互动次数：只用来推熟度，不存任何聊天内容。"""
+        rel = self.load_global()
+        card = rel.get(uid) or {"count": 0, "name": "", "last_seen": 0}
+        card["count"] = int(card.get("count") or 0) + 1
+        if name:
+            card["name"] = name[:24]
+        card["last_seen"] = time.time()
+        rel[uid] = card
+        return card
+
+
+def level_of(count: int) -> int:
+    return 2 if count >= 8 else (1 if count >= 3 else 0)
 
 
 LEVEL_TEXT = {0: "生人", 1: "半熟", 2: "熟人"}

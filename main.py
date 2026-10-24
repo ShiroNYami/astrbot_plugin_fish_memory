@@ -31,7 +31,7 @@ from .extract import (
     parse_evolve,
     parse_extracted,
 )
-from .store import LEVEL_TEXT, MemoryStore, fmt_day, select_memories
+from .store import LEVEL_TEXT, MemoryStore, fmt_day, level_of, select_memories
 
 MARKER = "【你记得的】"
 IDENTITY_MARKER = "【眼前这个人】"
@@ -45,7 +45,7 @@ TRIVIAL_RE = re.compile(r"^(哈+|6+|草+|乐|笑死|？+|\?+|在吗|嗯+|哦+|�
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.5.0",
+    "v0.6.0",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -234,6 +234,8 @@ class FishMemoryPlugin(Star):
             if uid:
                 self.store.touch_relation(umo, uid, name, text)
                 self.store.save_relations(umo)
+                self.store.touch_global(uid, name)
+                self.store.save_global()
 
         # 身份提示：模型看不到 QQ 号，这里替它认人
         if IDENTITY_MARKER not in (req.prompt or ""):
@@ -397,7 +399,11 @@ class FishMemoryPlugin(Star):
             self._save_state()
 
     def _identity_line(self, umo: str, uid: str, name: str) -> str:
-        """告诉模型「眼前这个人是谁、是不是主人」，避免它拿 QQ 号瞎猜。"""
+        """告诉模型「眼前这个人是谁、是不是主人」，避免它拿 QQ 号瞎猜。
+
+        熟度取「本会话」和「全局」的折中：全局熟度降一级当起点，
+        这样私聊里的熟人进群不会直接装成老朋友。
+        """
         if not uid:
             return ""
         owners = {
@@ -406,10 +412,14 @@ class FishMemoryPlugin(Star):
             if x.strip()
         }
         relation = (self.store.load_relations(umo) or {}).get(uid) or {}
-        level = LEVEL_TEXT.get(int(relation.get("level") or 0), "生人")
+        session_level = int(relation.get("level") or 0)
+        global_card = (self.store.load_global() or {}).get(uid) or {}
+        global_level = level_of(int(global_card.get("count") or 0))
+        level = max(session_level, max(0, global_level - 1))
+        level_text = LEVEL_TEXT.get(level, "生人")
         label = name or relation.get("name") or "对方"
         role = "是你的主人" if uid in owners else "不是主人"
-        return f"{IDENTITY_MARKER}{label}（{level}），{role}。这行是提示，别念出来。"
+        return f"{IDENTITY_MARKER}{label}（{level_text}），{role}。这行是提示，别念出来。"
 
     @staticmethod
     def _tag(umo: str, name: str = "") -> str:
