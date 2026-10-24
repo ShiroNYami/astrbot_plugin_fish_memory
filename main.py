@@ -40,15 +40,22 @@ PLUGIN = None
 # 明显不值得开一次模型调用的消息：「哈哈哈」「6」「在吗」「?」
 TRIVIAL_RE = re.compile(r"^(哈+|6+|草+|乐|笑死|？+|\?+|在吗|嗯+|哦+|好+|行+|可以|对+|是+|ok|收到)+$", re.I)
 
-# 人格里明令不许，模型偶尔还是会带出来，发出去前抹掉
-FISH_EMOJI_RE = re.compile(r"[🐟🐠🐡🐳🐋🌊🫧]")
+# 人格里只允许黄豆表情，其余 emoji 发送前抹掉
+EMOJI_ANY_RE = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F]")
+YELLOW_FACES = set(
+    "😀😃😄😁😆😅😂🙂🙃😉😊😇😌😔😪😴😷🤔😏😒🙄😬😮😯😲😳🥺😢😭😤😠😡😱🥶🥵🤗"
+)
+
+
+def strip_emoji(text: str) -> str:
+    return "".join(ch for ch in text if ch in YELLOW_FACES or not EMOJI_ANY_RE.match(ch))
 
 
 @register(
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.6.2",
+    "v0.6.3",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -282,7 +289,7 @@ class FishMemoryPlugin(Star):
 
     @filter.on_decorating_result()
     async def strip_fish_talk(self, event: AstrMessageEvent) -> None:
-        """把「本鱼」和鱼类 emoji 从回复里抹掉：人格写了不许，模型偶尔还是会犯。"""
+        """只留黄豆表情，其余 emoji 和「本鱼」都抹掉：人格写了不许，模型偶尔还是会犯。"""
         if not self._get_bool("strip_fish_emoji", True):
             return
         try:
@@ -292,8 +299,8 @@ class FishMemoryPlugin(Star):
         chain = getattr(result, "chain", None) or []
         for comp in chain:
             if isinstance(comp, Plain) and comp.text:
-                text = FISH_EMOJI_RE.sub("", comp.text).replace("本鱼", "我")
-                text = re.sub(r"[ \t]{2,}", " ", text)
+                text = strip_emoji(comp.text).replace("本鱼", "我")
+                text = re.sub(r"[ \t]{2,}", " ", text).strip()
                 if text != comp.text:
                     comp.text = text
 
