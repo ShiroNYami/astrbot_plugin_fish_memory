@@ -45,7 +45,7 @@ TRIVIAL_RE = re.compile(r"^(哈+|6+|草+|乐|笑死|？+|\?+|在吗|嗯+|哦+|�
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.6.0",
+    "v0.6.1",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -543,9 +543,15 @@ class FishMemoryPlugin(Star):
         for uid, card in list(relations.items())[:10]:
             level = {0: "生人", 1: "半熟", 2: "熟人"}.get(int(card.get("level") or 0), "生人")
             name = card.get("name") or uid
-            line = f"{name}（{level}，{card.get('count') or 0} 次）"
+            line = f"{name}（本会话 {level}，{card.get('count') or 0} 次）"
             if card.get("topic"):
                 line += f" 上次：{card['topic']}"
+            global_card = (self.store.load_global() or {}).get(uid) or {}
+            global_count = int(global_card.get("count") or 0)
+            if global_count:
+                global_level = LEVEL_TEXT.get(level_of(global_count), "生人")
+                effective = max(int(card.get("level") or 0), max(0, level_of(global_count) - 1))
+                line += f"｜全局 {global_count} 次（{global_level}）→ 显示 {LEVEL_TEXT.get(effective, '生人')}"
             lines.append(line)
         yield event.plain_result("关系卡：\n" + "\n".join(lines))
 
