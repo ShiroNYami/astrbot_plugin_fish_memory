@@ -80,8 +80,8 @@
   "max_entries": {
     "type": "int",
     "description": "每个会话最多存几条",
-    "hint": "超出后删最旧最不重要的。默认 400。",
-    "default": 400
+    "hint": "满了之后按价值挤掉最弱的一条（7 天内的新条目不参与）。默认 800。",
+    "default": 800
   },
   "owner_qq": {
     "type": "string",

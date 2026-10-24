@@ -101,6 +101,17 @@ def score_entry(
     return total, {"evidence": ev, "freshness": fr, "importance": imp, "emotion": emo}
 
 
+def entry_value(entry: dict, now: float, half_life_days: float = DEFAULT_HALF_LIFE_DAYS) -> float:
+    """淘汰用的「价值」：重要度为主，新鲜度和被想起来的次数为辅。
+
+    和召回打分不是一回事：召回看「和这次问的相关性」，这里看「值不值得留」。
+    """
+    imp = max(0.0, min(5.0, float(entry.get("importance") or 3))) / 5.0
+    fr = freshness(entry.get("created_at") or now, now, half_life_days)
+    hits = min(1.0, float(entry.get("hits") or 0) / 3.0)
+    return 0.6 * imp + 0.3 * fr + 0.1 * hits
+
+
 def select_memories(
     entries: list[dict],
     query: str,
@@ -207,11 +218,8 @@ class MemoryStore:
         except Exception:
             pass
 
-    def add(self, umo: str, item: dict) -> dict:
-        items = self.load(umo)
-        now = time.time()
-        next_id = max([int(m.get("id") or 0) for m in items] or [0]) + 1
-        entry = {
+    def _normalize(self, item: dict, next_id: int, now: float) -> dict:
+        return {
             "id": next_id,
             "text": " ".join(str(item.get("text") or "").split())[:160],
             "key": str(item.get("key") or "").strip()[:40],
@@ -226,9 +234,70 @@ class MemoryStore:
             "hits": 0,
             "superseded": False,
         }
+
+    def _next_id(self, items: list[dict]) -> int:
+        return max([int(m.get("id") or 0) for m in items] or [0]) + 1
+
+    def add(self, umo: str, item: dict) -> dict:
+        """不加限制地写入（测试和手动导入用；正常聊天走 insert）。"""
+        items = self.load(umo)
+        now = time.time()
+        entry = self._normalize(item, self._next_id(items), now)
         items.append(entry)
         self._cache[umo] = items
         return entry
+
+    def insert(
+        self,
+        umo: str,
+        item: dict,
+        *,
+        limit: int = 800,
+        protect_days: int = 7,
+        margin: float = 0.02,
+    ) -> tuple[dict | None, dict | None]:
+        """写入一条记忆，必要时按「价值」挤掉最弱的一条。
+
+        淘汰顺序：
+        1. 已被取代的死条目，先清
+        2. 没满就直接放
+        3. 满了：7 天内的新条目和 pinned 受保护；新条目价值要比最弱者高 margin 才顶替
+        返回 (新条目, 被挤掉的条目)；没写进去时第一项为 None。
+        """
+        items = self.load(umo)
+        now = time.time()
+        entry = self._normalize(item, self._next_id(items), now)
+
+        dead = [old for old in items if old.get("superseded")]
+        if dead:
+            items.remove(dead[0])
+            items.append(entry)
+            return entry, None
+
+        if len(items) < limit:
+            items.append(entry)
+            return entry, None
+
+        protected = {id(old) for old in items if old.get("pinned") or now - float(old.get("created_at") or 0) < protect_days * 86400}
+        pool = [old for old in items if id(old) not in protected]
+        if not pool:
+            return None, None
+
+        weakest = min(pool, key=lambda old: entry_value(old, now))
+        if entry_value(entry, now) < entry_value(weakest, now) + margin:
+            return None, None
+
+        items.remove(weakest)
+        items.append(entry)
+        return entry, weakest
+
+    def touch(self, umo: str, ids: set[int]) -> None:
+        """被想起来的记忆加一次命中，长期会被优先保留。"""
+        now = time.time()
+        for old in self.load(umo):
+            if int(old.get("id") or 0) in ids:
+                old["hits"] = int(old.get("hits") or 0) + 1
+                old["last_seen"] = now
 
     def supersede_by_key(self, umo: str, entry: dict) -> bool:
         """同 key 只留最新：把旧的标成已被取代。返回是否动过。"""

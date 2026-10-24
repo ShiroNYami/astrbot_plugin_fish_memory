@@ -42,10 +42,10 @@ TRIVIAL_RE = re.compile(r"^(哈+|6+|草+|乐|笑死|？+|\?+|在吗|嗯+|哦+|�
 
 @register(
     "astrbot_plugin_fish_memory",
-    "chiaki",
+    "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.1.0",
-    "https://github.com/",
+    "v0.2.0",
+    "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig | dict | None = None) -> None:
@@ -58,6 +58,7 @@ class FishMemoryPlugin(Star):
         self._queue: asyncio.Queue = asyncio.Queue(maxsize=50)
         self._worker: asyncio.Task | None = None
         self._last_extract: dict[str, float] = {}
+        self._last_store_save: dict[str, float] = {}
         global PLUGIN
         PLUGIN = self
 
@@ -246,6 +247,12 @@ class FishMemoryPlugin(Star):
         req.prompt = ((req.prompt or "") + "\n\n" + block).strip()
         event.set_extra("fish_memory_user", text)
 
+        # 被想起来一次，就多一点留下来的理由
+        self.store.touch(umo, {int(entry.get("id") or 0) for _t, entry, _d in picked})
+        if time.time() - self._last_store_save.get(umo, 0.0) > 120:
+            self.store.save(umo)
+            self._last_store_save[umo] = time.time()
+
     # ---------- 写回 ----------
 
     @filter.on_decorating_result()
@@ -330,20 +337,27 @@ class FishMemoryPlugin(Star):
         if not items:
             return
         added = 0
+        limit = self._get_int("max_entries", 800)
         for item in items:
             if self._quota_left(umo) <= 0:
                 break
+            if int(item.get("importance") or 3) <= 1 and not item.get("key"):
+                continue
             if self.store.find_similar(umo, item["text"]):
                 continue
             item["created_at"] = time.time()
-            entry = self.store.add(umo, item)
+            entry, evicted = self.store.insert(umo, item, limit=limit)
+            if not entry:
+                logger.info("[fish_memory] 工作集已满，这条不如现有的，跳过")
+                continue
+            if evicted:
+                logger.info(f"[fish_memory] 挤掉较弱的一条 #{evicted['id']}：{str(evicted.get('text'))[:20]}")
             self.store.supersede_by_key(umo, entry)
             self.store.append_journal(entry["text"], entry["created_at"], self._tag(umo, job.get("name")))
             added += 1
             self._quota_take(umo)
             logger.info(f"[fish_memory] 记住 #{entry['id']}：{entry['text'][:40]}")
         if added:
-            self.store.prune(umo, self._get_int("max_entries", 400))
             self.store.save(umo)
             self._save_state()
 
