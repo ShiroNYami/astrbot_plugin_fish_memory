@@ -128,8 +128,13 @@ def build_inject_block(picked: list, relation: dict | None, sender_name: str = "
         return ""
     lines = ["【你记得的】"]
     for _total, entry, _detail in picked:
-        lines.append(f"- {fmt_day(entry.get('created_at') or 0)} {entry.get('text')}")
-    lines.append("（这些是你自己的记忆：接得上就提一句，接不上别硬提，更别逐条复述。）")
+        who = str(entry.get("src_name") or "").strip()
+        prefix = f"{who}：" if who else ""
+        lines.append(f"- {fmt_day(entry.get('created_at') or 0)} {prefix}{entry.get('text')}")
+    lines.append(
+        "（这些是你自己的记忆，冒号前是这句话是谁说的。接得上就提一句，接不上别硬提，"
+        "别逐条复述，更别把别人的事安到眼前这个人头上。）"
+    )
     if relation:
         level = LEVEL_TEXT.get(int(relation.get("level") or 0), "生人")
         name = sender_name or relation.get("name") or ""

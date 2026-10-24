@@ -80,6 +80,7 @@ docker compose restart astrbot
 | `min_evidence` | float | 0.34 | 证据门槛，调高更少提，调低更容易想起来 |
 | `half_life_days` | int | 30 | 半衰期 |
 | `max_entries` | int | 800 | 每会话工作记忆上限，满了按价值淘汰 |
+| `group_memory_scope` | string | shared | 群聊共享范围：`shared` 全员可见 / `per_speaker` 只召回说话人自己的 |
 | `owner_qq` | string | — | 能用管理命令的 QQ，多个逗号分隔；群聊私聊都只认这个 |
 | `allow_bot_admin` | bool | false | 是否放行 AstrBot 的 `admins_id`；默认不放行 |
 
@@ -118,6 +119,18 @@ score = 0.45 × 证据 + 0.25 × 新鲜度 + 0.20 × 重要度 + 0.10 × 情绪
 - 低于 `min_evidence` 的记忆不注入（`pinned` 除外）
 - 取分数最高的 `top_n` 条，总字数不超过 `max_inject_chars`
 - 被注入一次，`hits + 1`，以后更不容易被淘汰
+
+### 5.2.1 群聊里谁能被想起来（`group_memory_scope`）
+
+每条记忆都记了「谁说的」（`src_uid` / `src_name`），注入时写成 `- 10-24 小秋：她妈住院了`。
+
+| 取值 | 行为 | 适合 |
+|---|---|---|
+| `shared`（默认） | 群里所有人的记忆都在候选池，但会注明是谁说的 | 小群、朋友群，需要共同上下文 |
+| `per_speaker` | 只召回当前说话人自己的，加上公共条目（`who=共同` / `pinned` / 无来源的老条目） | 人多、怕认错人 |
+
+`per_speaker` 的代价：群友 B 说的计划，A 问起时鱼不知道（除非那条被标成「共同」）。
+私聊不受影响，私聊桶里本来就只有你和它的记忆。
 
 ### 5.3 淘汰：满了留谁
 

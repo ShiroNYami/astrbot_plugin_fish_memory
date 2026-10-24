@@ -83,6 +83,12 @@
     "hint": "满了之后按价值挤掉最弱的一条（7 天内的新条目不参与）。默认 800。",
     "default": 800
   },
+  "group_memory_scope": {
+    "type": "string",
+    "description": "群聊记忆共享范围",
+    "hint": "shared：群里所有人的记忆都在候选池，注入时注明是谁说的；per_speaker：只召回当前说话人自己的，以及公共条目（who=共同 / pinned / 无来源）。默认 shared。",
+    "default": "shared"
+  },
   "owner_qq": {
     "type": "string",
     "description": "主人 QQ",

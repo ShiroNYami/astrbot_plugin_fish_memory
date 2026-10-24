@@ -44,7 +44,7 @@ TRIVIAL_RE = re.compile(r"^(哈+|6+|草+|乐|笑死|？+|\?+|在吗|嗯+|哦+|�
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.2.1",
+    "v0.3.0",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -244,6 +244,8 @@ class FishMemoryPlugin(Star):
             max_chars=self._get_int("max_inject_chars", 800),
             min_evidence=self._get_float("min_evidence", 0.34),
             half_life_days=float(self._get_int("half_life_days", 30)),
+            scope=self._get_str("group_memory_scope", "shared"),
+            speaker_uid=uid,
         )
         if not picked:
             return
@@ -353,6 +355,8 @@ class FishMemoryPlugin(Star):
             if self.store.find_similar(umo, item["text"]):
                 continue
             item["created_at"] = time.time()
+            item["src_uid"] = job.get("uid") or ""
+            item["src_name"] = job.get("name") or ""
             entry, evicted = self.store.insert(umo, item, limit=limit)
             if not entry:
                 logger.info("[fish_memory] 工作集已满，这条不如现有的，跳过")

@@ -121,6 +121,8 @@ def select_memories(
     max_chars: int = 800,
     min_evidence: float = 0.34,
     half_life_days: float = DEFAULT_HALF_LIFE_DAYS,
+    scope: str = "shared",
+    speaker_uid: str = "",
 ) -> list[tuple[float, dict, dict]]:
     """按打分挑出这次要注入的记忆。
 
@@ -128,13 +130,26 @@ def select_memories(
     - 被取代的（superseded）不要
     - 长期事实（pinned）永远参与；普通记忆证据不足就跳过
     - 按分数降序，总字数封顶
+    - scope="per_speaker" 时，只留当前说话人自己的、以及公共条目（who=共同 / pinned /
+      没有来源的老条目），别人的条目不参与
     """
     now = time.time() if now is None else now
     q = tokenize(query)
+    strict = scope == "per_speaker" and bool(speaker_uid)
     ranked: list[tuple[float, dict, dict]] = []
     for entry in entries:
         if entry.get("superseded"):
             continue
+        if strict:
+            source = str(entry.get("src_uid") or "")
+            shared = (
+                not source
+                or source == speaker_uid
+                or bool(entry.get("pinned"))
+                or str(entry.get("who") or "") == "共同"
+            )
+            if not shared:
+                continue
         total, detail = score_entry(entry, q, query, now, half_life_days)
         if not entry.get("pinned") and detail["evidence"] < min_evidence:
             continue
@@ -228,6 +243,8 @@ class MemoryStore:
             "who": str(item.get("who") or "她")[:8],
             "terms": [str(t)[:12] for t in (item.get("terms") or [])][:6],
             "pinned": bool(item.get("pinned")),
+            "src_uid": str(item.get("src_uid") or "")[:32],
+            "src_name": str(item.get("src_name") or "")[:24],
             "source": str(item.get("source") or "chat")[:16],
             "created_at": float(item.get("created_at") or now),
             "last_seen": now,
