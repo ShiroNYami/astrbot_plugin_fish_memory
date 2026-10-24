@@ -95,6 +95,12 @@
     "hint": "开启后，群聊回复里的“主人”会被替换成“你”；私聊不受影响。给模型的不听话兜底。",
     "default": true
   },
+  "strip_fish_emoji": {
+    "type": "bool",
+    "description": "抹掉鱼类表情与自称",
+    "hint": "开启后，回复里的 🐟🐠🐡🐳🐋🌊 会被删掉，“本鱼”会替换成“我”。人格写了不许，模型偶尔还是会犯，这里兜底。",
+    "default": true
+  },
   "owner_qq": {
     "type": "string",
     "description": "主人 QQ",
