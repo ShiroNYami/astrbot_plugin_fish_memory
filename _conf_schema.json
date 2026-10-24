@@ -1,0 +1,92 @@
+{
+  "enable": {
+    "type": "bool",
+    "description": "启用鱼的记忆",
+    "hint": "总开关。关掉后既不注入也不提炼。",
+    "default": true
+  },
+  "inject_enable": {
+    "type": "bool",
+    "description": "注入记忆",
+    "hint": "每次请求前把相关记忆拼进上下文。关掉只写不读，适合先攒一阵再开。",
+    "default": true
+  },
+  "write_enable": {
+    "type": "bool",
+    "description": "提炼记忆",
+    "hint": "每轮聊天后调用一次小模型提炼。关掉就不产生新记忆，也不花 token。",
+    "default": true
+  },
+  "session_default_on": {
+    "type": "bool",
+    "description": "新会话默认开启",
+    "hint": "关掉的话，要手动 /记忆开关 才生效。",
+    "default": true
+  },
+  "provider_id": {
+    "type": "string",
+    "description": "提炼用哪个模型",
+    "hint": "留空就用当前会话正在用的模型。建议填一个便宜的（如 flash / lite），提炼不需要强模型。",
+    "default": ""
+  },
+  "min_msg_chars": {
+    "type": "int",
+    "description": "触发提炼的最短消息长度",
+    "hint": "用户消息短于这个字数就不提炼，避免「在吗」「哈哈」也记。默认 8。",
+    "default": 8
+  },
+  "hourly_quota": {
+    "type": "int",
+    "description": "每小时最多记几条",
+    "hint": "按小时放额度，避免早上就把当天额度用完、后面聊什么都记不进去。默认 3。设为 0 表示不限。",
+    "default": 3
+  },
+  "daily_quota": {
+    "type": "int",
+    "description": "每天最多记几条",
+    "hint": "每日总上限，防极端情况。默认 30。",
+    "default": 30
+  },
+  "extract_interval_seconds": {
+    "type": "int",
+    "description": "两次提炼的最小间隔（秒）",
+    "hint": "控制提炼花的 token：同一会话在这个间隔内只提炼一次。默认 60。调大更省钱，调小记得更细。",
+    "default": 60
+  },
+  "top_n": {
+    "type": "int",
+    "description": "每次最多注入几条",
+    "hint": "默认 6。条数越多越占上下文，也越容易出现「记忆复读」。",
+    "default": 6
+  },
+  "max_inject_chars": {
+    "type": "int",
+    "description": "注入内容字数上限",
+    "hint": "默认 800 字，约 500 token。和 top_n 一起封顶。",
+    "default": 800
+  },
+  "min_evidence": {
+    "type": "float",
+    "description": "证据门槛",
+    "hint": "查询词命中率低于这个值就不注入。调高更少说话，调低更容易想起来。默认 0.34。",
+    "default": 0.34
+  },
+  "half_life_days": {
+    "type": "int",
+    "description": "半衰期（天）",
+    "hint": "多少天后记忆的鲜活度减半。默认 30。长期事实（pinned）不受影响。",
+    "default": 30
+  },
+  "max_entries": {
+    "type": "int",
+    "description": "每个会话最多存几条",
+    "hint": "超出后删最旧最不重要的。默认 400。",
+    "default": 400
+  },
+  "owner_qq": {
+    "type": "string",
+    "description": "主人 QQ",
+    "hint": "多个用逗号分隔。只有这些号能用 /记忆簿、/删记忆、/记忆开关、/关系卡、/进化。",
+    "default": "929765409"
+  }
+}

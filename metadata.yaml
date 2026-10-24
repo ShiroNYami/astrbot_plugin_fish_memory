@@ -1,0 +1,16 @@
+name: astrbot_plugin_fish_memory
+display_name: 鱼的记忆
+short_desc: 给 QQ 聊天加一份会淡忘的长期记忆，接得上才提，不重要的慢慢淡掉。
+desc: >-
+  每条聊天结束后，用一个便宜的小模型把「值得记住的事」提炼成一句话存下来（稳定事实、约定、情绪事件、
+  她自己的偏好）。下次对话开始时，按证据命中 + 半衰期新鲜度 + 重要度 + 情绪挑出最多 6 条注入上下文。
+  真的会淡忘：30 天减半，但内容不删。另带关系卡（熟人/半熟/生人 + 上次聊到什么）和 /进化 候选。
+help: >-
+  /记忆簿 查看、/删记忆 3 删除、/记忆开关 开关当前会话、/关系卡 看关系、/进化 看性格变化候选。
+  首次使用前，在 AstrBot 插件配置里确认开关和 provider。
+version: v0.1.0
+author: byakuya
+repo: https://github.com/ShiroNYami/astrbot_plugin_fish_memory
+astrbot_version: ">=4.16,<5"
+support_platforms:
+  - aiocqhttp
