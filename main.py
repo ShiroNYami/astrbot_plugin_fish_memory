@@ -44,7 +44,7 @@ TRIVIAL_RE = re.compile(r"^(哈+|6+|草+|乐|笑死|？+|\?+|在吗|嗯+|哦+|�
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.3.0",
+    "v0.4.0",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -263,6 +263,23 @@ class FishMemoryPlugin(Star):
             self._last_store_save[umo] = time.time()
 
     # ---------- 写回 ----------
+
+    @filter.on_decorating_result()
+    async def strip_master_in_group(self, event: AstrMessageEvent) -> None:
+        """群聊里不许叫「主人」：模型不听话时兜底替换。"""
+        if not self._get_bool("strip_master_in_group", True):
+            return
+        umo = event.unified_msg_origin or ""
+        if "group" not in umo.lower():
+            return
+        try:
+            result = event.get_result()
+        except Exception:  # noqa: BLE001
+            return
+        chain = getattr(result, "chain", None) or []
+        for comp in chain:
+            if isinstance(comp, Plain) and comp.text and "主人" in comp.text:
+                comp.text = comp.text.replace("主人", "你")
 
     @filter.on_decorating_result()
     async def capture_reply(self, event: AstrMessageEvent) -> None:
