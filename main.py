@@ -31,9 +31,10 @@ from .extract import (
     parse_evolve,
     parse_extracted,
 )
-from .store import MemoryStore, fmt_day, select_memories
+from .store import LEVEL_TEXT, MemoryStore, fmt_day, select_memories
 
 MARKER = "【你记得的】"
+IDENTITY_MARKER = "【眼前这个人】"
 PLUGIN = None
 
 # 明显不值得开一次模型调用的消息：「哈哈哈」「6」「在吗」「?」
@@ -44,7 +45,7 @@ TRIVIAL_RE = re.compile(r"^(哈+|6+|草+|乐|笑死|？+|\?+|在吗|嗯+|哦+|�
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.4.0",
+    "v0.5.0",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -234,6 +235,12 @@ class FishMemoryPlugin(Star):
                 self.store.touch_relation(umo, uid, name, text)
                 self.store.save_relations(umo)
 
+        # 身份提示：模型看不到 QQ 号，这里替它认人
+        if IDENTITY_MARKER not in (req.prompt or ""):
+            identity = self._identity_line(umo, uid, name)
+            if identity:
+                req.prompt = ((req.prompt or "") + "\n\n" + identity).strip()
+
         entries = self.store.load(umo)
         if not entries:
             return
@@ -388,6 +395,21 @@ class FishMemoryPlugin(Star):
         if added:
             self.store.save(umo)
             self._save_state()
+
+    def _identity_line(self, umo: str, uid: str, name: str) -> str:
+        """告诉模型「眼前这个人是谁、是不是主人」，避免它拿 QQ 号瞎猜。"""
+        if not uid:
+            return ""
+        owners = {
+            x.strip()
+            for x in self._get_str("owner_qq", "").replace("，", ",").split(",")
+            if x.strip()
+        }
+        relation = (self.store.load_relations(umo) or {}).get(uid) or {}
+        level = LEVEL_TEXT.get(int(relation.get("level") or 0), "生人")
+        label = name or relation.get("name") or "对方"
+        role = "是你的主人" if uid in owners else "不是主人"
+        return f"{IDENTITY_MARKER}{label}（{level}），{role}。这行是提示，别念出来。"
 
     @staticmethod
     def _tag(umo: str, name: str = "") -> str:
