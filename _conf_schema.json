@@ -86,7 +86,13 @@
   "owner_qq": {
     "type": "string",
     "description": "主人 QQ",
-    "hint": "多个用逗号分隔。只有这些号能用 /记忆簿、/删记忆、/记忆开关、/关系卡、/进化。",
+    "hint": "多个用逗号分隔。只有这些号能用 /记忆簿、/删记忆、/记忆开关、/关系卡、/进化、/导出记忆。",
     "default": "929765409"
+  },
+  "allow_bot_admin": {
+    "type": "bool",
+    "description": "允许机器人管理员用记忆命令",
+    "hint": "关闭时只认 owner_qq。打开后，AstrBot 的 admins_id 里的人也能删记忆、导档案，慎开。",
+    "default": false
   }
 }

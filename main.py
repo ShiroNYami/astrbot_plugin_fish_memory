@@ -44,7 +44,7 @@ TRIVIAL_RE = re.compile(r"^(哈+|6+|草+|乐|笑死|？+|\?+|在吗|嗯+|哦+|�
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.2.0",
+    "v0.2.1",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -93,17 +93,24 @@ class FishMemoryPlugin(Star):
             return default
 
     def _is_owner(self, event: AstrMessageEvent) -> bool:
-        try:
-            if event.is_admin():
-                return True
-        except Exception:  # noqa: BLE001
-            pass
+        """只认 owner_qq 里的号。
+
+        以前还会放行 AstrBot 的 admins_id，但那样只要有人被加进机器人管理员就能删记忆，
+        所以改成默认不放行；确实需要时把 allow_bot_admin 打开。
+        """
         owner = self._get_str("owner_qq", "929765409")
         ids = {x.strip() for x in owner.replace("，", ",").split(",") if x.strip()}
         try:
-            return str(event.get_sender_id()) in ids
+            if str(event.get_sender_id()) in ids:
+                return True
         except Exception:  # noqa: BLE001
-            return False
+            pass
+        if self._get_bool("allow_bot_admin", False):
+            try:
+                return bool(event.is_admin())
+            except Exception:  # noqa: BLE001
+                return False
+        return False
 
     # ---------- 会话状态 ----------
 
