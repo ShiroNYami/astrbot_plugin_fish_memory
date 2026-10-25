@@ -55,7 +55,7 @@ def strip_emoji(text: str) -> str:
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.7.0",
+    "v0.8.1",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -397,7 +397,9 @@ class FishMemoryPlugin(Star):
         if not provider:
             logger.warning("[fish_memory] 没有可用的 provider，跳过提炼")
             return
-        prompt = build_extract_prompt(job["user"], job["reply"], job["name"])
+        prompt = build_extract_prompt(
+            job["user"], job["reply"], job["name"], "group" in umo.lower()
+        )
         resp = await provider.text_chat(prompt=prompt, system_prompt=EXTRACT_SYSTEM)
         items = parse_extracted(getattr(resp, "completion_text", "") or "")
         if not items:
@@ -483,9 +485,51 @@ class FishMemoryPlugin(Star):
         lines = [f"记忆簿（{len(entries)} 条，{'开' if self._session_on(umo) else '关'}）"]
         for m in entries[:20]:
             star = "★" * int(m.get("importance") or 0)
-            lines.append(f"#{m['id']} {fmt_day(float(m.get('created_at') or 0))} {m['text']} {star}")
+            who = f"[{m['src_name']}] " if m.get("src_name") else ""
+            lines.append(f"#{m['id']} {fmt_day(float(m.get('created_at') or 0))} {who}{m['text']} {star}")
         if len(entries) > 20:
             lines.append(f"……还有 {len(entries) - 20} 条")
+        yield event.plain_result("\n".join(lines))
+
+    @filter.command("查记忆", desc="按 QQ 号或名字查某个人说过的话（仅主人）")
+    async def search_cmd(self, event: AstrMessageEvent, text: GreedyStr):
+        if not self._is_owner(event):
+            yield event.plain_result("这条只认主人哦。")
+            return
+        arg = str(text).strip().lstrip("@")
+        if not arg:
+            yield event.plain_result("用法：/查记忆 929765409（QQ 号）或 /查记忆 小秋（名字）")
+            return
+        by_id = arg.isdigit()
+        rows = []
+        for bucket in self.store.buckets():
+            for entry in bucket["entries"]:
+                if entry.get("superseded"):
+                    continue
+                uid = str(entry.get("src_uid") or "")
+                name = str(entry.get("src_name") or "")
+                hit = (uid == arg) if by_id else (arg in name)
+                if hit:
+                    rows.append(
+                        (
+                            float(entry.get("created_at") or 0),
+                            session_label(bucket["umo"]),
+                            entry,
+                        )
+                    )
+        if not rows:
+            yield event.plain_result(f"没找到「{arg}」说过的记忆。")
+            return
+        rows.sort(key=lambda item: item[0], reverse=True)
+        lines = [f"「{arg}」的记忆（{len(rows)} 条）："]
+        for ts, label, entry in rows[:15]:
+            star = "★" * int(entry.get("importance") or 0)
+            lines.append(
+                f"#{entry['id']} {time.strftime('%m-%d', time.localtime(ts))} {label} "
+                f"{str(entry.get('text'))} {star}"
+            )
+        if len(rows) > 15:
+            lines.append(f"……还有 {len(rows) - 15} 条")
         yield event.plain_result("\n".join(lines))
 
     @filter.command("记忆全书", desc="看所有会话的记忆统计（仅主人）")
@@ -508,7 +552,11 @@ class FishMemoryPlugin(Star):
         rows.sort(key=lambda item: item[0], reverse=True)
         lines.append("最近：")
         for ts, label, entry in rows[:5]:
-            lines.append(f"- {time.strftime('%m-%d', time.localtime(ts))} {label} {str(entry.get('text'))[:28]}")
+            who = entry.get("src_name") or ""
+            who_part = f"[{who}] " if who else ""
+            lines.append(
+                f"- {time.strftime('%m-%d', time.localtime(ts))} {label} {who_part}{str(entry.get('text'))[:28]}"
+            )
         yield event.plain_result("\n".join(lines))
 
     @filter.command("导出记忆", desc="导出人生档案 markdown（仅主人）")
