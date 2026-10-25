@@ -55,7 +55,7 @@ def strip_emoji(text: str) -> str:
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.6.3",
+    "v0.7.0",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -447,9 +447,13 @@ class FishMemoryPlugin(Star):
         global_card = (self.store.load_global() or {}).get(uid) or {}
         global_level = level_of(int(global_card.get("count") or 0))
         level = max(session_level, max(0, global_level - 1))
+        is_owner = uid in owners
+        if is_owner:
+            # 主人的底子至少是半熟，免得换个新群就变生人
+            level = max(level, 2)
         level_text = LEVEL_TEXT.get(level, "生人")
         label = name or relation.get("name") or "对方"
-        role = "是你的主人" if uid in owners else "不是主人"
+        role = "是你的主人" if is_owner else "不是主人"
         return f"{IDENTITY_MARKER}{label}（{level_text}），{role}。这行是提示，别念出来。"
 
     @staticmethod
@@ -572,7 +576,7 @@ class FishMemoryPlugin(Star):
             relations = {arg: relations[arg]}
         lines = []
         for uid, card in list(relations.items())[:10]:
-            level = {0: "生人", 1: "半熟", 2: "熟人"}.get(int(card.get("level") or 0), "生人")
+            level = LEVEL_TEXT.get(int(card.get("level") or 0), "生人")
             name = card.get("name") or uid
             line = f"{name}（本会话 {level}，{card.get('count') or 0} 次）"
             if card.get("topic"):
