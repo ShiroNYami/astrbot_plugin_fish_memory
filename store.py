@@ -494,10 +494,19 @@ class MemoryStore:
 
 
 def level_of(count: int) -> int:
-    return 2 if count >= 8 else (1 if count >= 3 else 0)
+    """五级：生人 / 眼熟 / 半熟 / 熟人 / 自己人。"""
+    if count >= 80:
+        return 4
+    if count >= 30:
+        return 3
+    if count >= 10:
+        return 2
+    if count >= 3:
+        return 1
+    return 0
 
 
-LEVEL_TEXT = {0: "生人", 1: "半熟", 2: "熟人"}
+LEVEL_TEXT = {0: "生人", 1: "眼熟", 2: "半熟", 3: "熟人", 4: "自己人", 5: "恋人"}
 
 
 if __name__ == "__main__":  # 本地冒烟测试

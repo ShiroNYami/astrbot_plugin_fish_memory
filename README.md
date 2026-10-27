@@ -85,6 +85,8 @@ docker compose restart astrbot
 | `max_entries` | int | 800 | 每会话工作记忆上限，满了按价值淘汰 |
 | `group_memory_scope` | string | shared | 群聊共享范围：`shared` 全员可见 / `per_speaker` 只召回说话人自己的 |
 | `owner_qq` | string | — | 能用管理命令的 QQ，多个逗号分隔；群聊私聊都只认这个 |
+| `owner_relation` | string | 恋人 | 主人和她的关系；填「恋人」= 主人固定最高等级，留空则按次数算 |
+| `lover_private_only` | bool | true | 恋人只在私聊显示，群里最多到「自己人」 |
 | `allow_bot_admin` | bool | false | 是否放行 AstrBot 的 `admins_id`；默认不放行 |
 
 ---
@@ -171,6 +173,7 @@ score = 0.45 × 证据 + 0.25 × 新鲜度 + 0.20 × 重要度 + 0.10 × 情绪
 
 ```
 /记忆簿           看这个会话记住了什么（最近 20 条）
+/查记忆 929765409  按 QQ 号或名字跨会话查某人的记忆
 /记忆全书         所有会话的条数统计 + 全局最近 5 条
 /删记忆 3         删第 3 条；/删记忆 全部 清空
 /记忆开关         开关当前会话
