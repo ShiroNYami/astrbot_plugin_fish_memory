@@ -55,7 +55,7 @@ def strip_emoji(text: str) -> str:
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.8.1",
+    "v0.9.0",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -431,31 +431,39 @@ class FishMemoryPlugin(Star):
             self.store.save(umo)
             self._save_state()
 
-    def _identity_line(self, umo: str, uid: str, name: str) -> str:
-        """告诉模型「眼前这个人是谁、是不是主人」，避免它拿 QQ 号瞎猜。
-
-        熟度取「本会话」和「全局」的折中：全局熟度降一级当起点，
-        这样私聊里的熟人进群不会直接装成老朋友。
-        """
-        if not uid:
-            return ""
+    def _is_owner_uid(self, uid: str) -> bool:
         owners = {
             x.strip()
             for x in self._get_str("owner_qq", "").replace("，", ",").split(",")
             if x.strip()
         }
+        return uid in owners
+
+    def _effective_level(self, umo: str, uid: str) -> int:
+        """本会话等级、全局折中、主人保底，以及恋人的特殊覆盖。"""
         relation = (self.store.load_relations(umo) or {}).get(uid) or {}
         session_level = int(relation.get("level") or 0)
         global_card = (self.store.load_global() or {}).get(uid) or {}
         global_level = level_of(int(global_card.get("count") or 0))
         level = max(session_level, max(0, global_level - 1))
-        is_owner = uid in owners
-        if is_owner:
-            # 主人的底子至少是半熟，免得换个新群就变生人
-            level = max(level, 2)
+        if self._is_owner_uid(uid):
+            level = max(level, 2)  # 主人保底半熟
+            if self._get_str("owner_relation", "") == "恋人":
+                if "group" in (umo or "").lower() and self._get_bool("lover_private_only", True):
+                    level = max(level, 4)
+                else:
+                    level = 5
+        return level
+
+    def _identity_line(self, umo: str, uid: str, name: str) -> str:
+        """告诉模型「眼前这个人是谁、是不是主人」，避免它拿 QQ 号瞎猜。"""
+        if not uid:
+            return ""
+        relation = (self.store.load_relations(umo) or {}).get(uid) or {}
+        level = self._effective_level(umo, uid)
         level_text = LEVEL_TEXT.get(level, "生人")
         label = name or relation.get("name") or "对方"
-        role = "是你的主人" if is_owner else "不是主人"
+        role = "是你的主人" if self._is_owner_uid(uid) else "不是主人"
         return f"{IDENTITY_MARKER}{label}（{level_text}），{role}。这行是提示，别念出来。"
 
     @staticmethod
@@ -631,10 +639,11 @@ class FishMemoryPlugin(Star):
                 line += f" 上次：{card['topic']}"
             global_card = (self.store.load_global() or {}).get(uid) or {}
             global_count = int(global_card.get("count") or 0)
+            effective = LEVEL_TEXT.get(self._effective_level(umo, uid), "生人")
             if global_count:
                 global_level = LEVEL_TEXT.get(level_of(global_count), "生人")
-                effective = max(int(card.get("level") or 0), max(0, level_of(global_count) - 1))
-                line += f"｜全局 {global_count} 次（{global_level}）→ 显示 {LEVEL_TEXT.get(effective, '生人')}"
+                line += f"｜全局 {global_count} 次（{global_level}）"
+            line += f"→ 显示 {effective}"
             lines.append(line)
         yield event.plain_result("关系卡：\n" + "\n".join(lines))
 

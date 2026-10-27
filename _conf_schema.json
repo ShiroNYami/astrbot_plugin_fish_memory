@@ -107,6 +107,18 @@
     "hint": "多个用逗号分隔。只有这些号能用 /记忆簿、/删记忆、/记忆开关、/关系卡、/进化、/导出记忆。",
     "default": "929765409"
   },
+  "owner_relation": {
+    "type": "string",
+    "description": "主人和她的关系",
+    "hint": "留空 = 按互动次数算；填「恋人」= 主人固定为最高等级，私聊显示「恋人」，群里默认只显示「自己人」。",
+    "default": "恋人"
+  },
+  "lover_private_only": {
+    "type": "bool",
+    "description": "恋人只在私聊显示",
+    "hint": "开启后，群里她的身份提示最多到「自己人」，不当众显示恋人。",
+    "default": true
+  },
   "allow_bot_admin": {
     "type": "bool",
     "description": "允许机器人管理员用记忆命令",
