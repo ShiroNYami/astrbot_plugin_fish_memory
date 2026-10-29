@@ -101,6 +101,48 @@
     "hint": "开启后，只保留黄豆表情，其余 emoji（含 🐟🐠🐡🐳🐋🌊）一律删掉，“本鱼”替换成“我”。人格写了不许，模型偶尔还是会犯，这里兜底。",
     "default": true
   },
+  "proactive_enable": {
+    "type": "bool",
+    "description": "主动搭话",
+    "hint": "开启后，长时间没聊天或她说完你没回，她会主动发私聊。只发私聊，不进群。",
+    "default": true
+  },
+  "proactive_daily_max": {
+    "type": "int",
+    "description": "每天最多主动几次",
+    "hint": "包含追问。默认 2。",
+    "default": 2
+  },
+  "proactive_start_hour": {
+    "type": "int",
+    "description": "主动消息时间窗-开始（点）",
+    "hint": "默认 10 点。跨午夜时配合结束时间使用。",
+    "default": 10
+  },
+  "proactive_end_hour": {
+    "type": "int",
+    "description": "主动消息时间窗-结束（点）",
+    "hint": "默认 1 点（次日）。设为 1 表示 10:00–01:00。",
+    "default": 1
+  },
+  "followup_idle_minutes": {
+    "type": "int",
+    "description": "多久没回就追问（分钟）",
+    "hint": "她说完话、你没回，超过这么久才可能追问一次。默认 30。",
+    "default": 30
+  },
+  "proactive_idle_hours": {
+    "type": "int",
+    "description": "多久没聊天会主动开口（小时）",
+    "hint": "默认 3 小时。没有由头时她不会发。",
+    "default": 3
+  },
+  "persona_id": {
+    "type": "string",
+    "description": "读哪个人格来生成主动消息",
+    "hint": "默认「蓝色大肥鱼」，从 data_v4.db 的 personas 表读取。",
+    "default": "蓝色大肥鱼"
+  },
   "owner_qq": {
     "type": "string",
     "description": "主人 QQ",

@@ -10,13 +10,16 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import random
 import re
+import sqlite3
 import time
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Plain
 from astrbot.api.star import Context, Star, register
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.star.filter.command import GreedyStr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -55,7 +58,7 @@ def strip_emoji(text: str) -> str:
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.9.0",
+    "v0.10.0",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -70,6 +73,7 @@ class FishMemoryPlugin(Star):
         self._worker: asyncio.Task | None = None
         self._last_extract: dict[str, float] = {}
         self._last_store_save: dict[str, float] = {}
+        self._proactive_task: asyncio.Task | None = None
         global PLUGIN
         PLUGIN = self
 
@@ -239,6 +243,9 @@ class FishMemoryPlugin(Star):
             return
 
         uid, name = self._sender(event)
+        if uid and self._is_owner_uid(uid):
+            self._note_owner_message(umo, uid, text)
+            self._ensure_proactive_task()
         if not event.get_extra("fish_memory_relation"):
             event.set_extra("fish_memory_relation", True)
             if uid:
@@ -331,6 +338,8 @@ class FishMemoryPlugin(Star):
         if event.get_extra("fish_memory_done"):
             return
         reply = self._reply_text(event)
+        if reply:
+            self._note_bot_message(umo, reply)
         user = self._message_text(event)
         if not reply or not user or user.startswith("/") or user.startswith("／"):
             return
@@ -477,6 +486,153 @@ class FishMemoryPlugin(Star):
             kind = "会话"
         return f"{kind}·{name}" if name else kind
 
+    # ---------- 主动搭话 ----------
+
+    def _owner_state(self) -> dict:
+        return self._state.setdefault("owner", {})
+
+    def _note_owner_message(self, umo: str, uid: str, text: str) -> None:
+        if not uid or not self._is_owner_uid(uid) or "friend" not in (umo or "").lower():
+            return
+        st = self._owner_state()
+        st["umo"] = umo
+        st["last_user_ts"] = time.time()
+        st["last_user_text"] = " ".join(str(text or "").split())[:200]
+        st["followup_for"] = 0
+
+    def _note_bot_message(self, umo: str, text: str) -> None:
+        st = self._owner_state()
+        if st.get("umo") and st["umo"] != umo:
+            return
+        st["last_bot_ts"] = time.time()
+        st["last_bot_text"] = " ".join(str(text or "").split())[:200]
+
+    def _persona_text(self) -> str:
+        path = os.path.join(get_astrbot_data_path(), "data_v4.db")
+        try:
+            conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+            row = conn.execute(
+                "select system_prompt from personas where persona_id=?",
+                (self._get_str("persona_id", "蓝色大肥鱼"),),
+            ).fetchone()
+            conn.close()
+            return str(row[0]) if row else ""
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def _in_window(self, now: float) -> bool:
+        start = self._get_int("proactive_start_hour", 10)
+        end = self._get_int("proactive_end_hour", 1)
+        hour = time.localtime(now).tm_hour
+        if start <= end:
+            return start <= hour < end
+        return hour >= start or hour < end
+
+    async def _send_proactive(self, umo: str, text: str) -> bool:
+        try:
+            ok = await self.context.send_message(umo, MessageChain([Plain(text)]))
+            return bool(ok)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"[fish_memory] 主动消息发送失败：{exc}")
+            return False
+
+    async def _generate_proactive(self, kind: str, idle_minutes: int) -> str:
+        provider = await self._provider(self._owner_state().get("umo", ""))
+        if not provider:
+            return ""
+        st = self._owner_state()
+        persona = self._persona_text()
+        system = (
+            (persona[:2500] + "\n\n" if persona else "")
+            + "现在不是在回复消息，而是你主动发一条私聊。只输出你要发的那句话，不要解释。"
+        )
+        if kind == "followup":
+            prompt = (
+                f"你上次说完话后，他已经 {idle_minutes} 分钟没回你了。\n"
+                f"他最后说的是：{st.get('last_user_text', '')}\n"
+                f"你说的是：{st.get('last_bot_text', '')}\n\n"
+                "你有点在意、有点不安，想试探一下他的情绪。写一句发过去，20 字以内："
+                "可以嘴硬、可以装作随口问，但别卑微、别质问、别连发。只输出这句话。"
+            )
+        else:
+            entries = [m for m in self.store.load(st.get("umo", "")) if not m.get("superseded")][-5:]
+            hints = "\n".join(f"- {m.get('text')}" for m in entries) or "（没有特别的事）"
+            prompt = (
+                f"你们已经 {idle_minutes // 60} 小时没说话了。\n"
+                f"你最近记得的事：\n{hints}\n\n"
+                "写一句主动找他说话的话，一到两句：可以聊聊你刚看到的事、你的想法，"
+                "但别用“在吗”，别问“你在干嘛”，别提到“主动”“陪你”这类词。"
+                "没有由头就只输出空字符串。"
+            )
+        try:
+            resp = await provider.text_chat(prompt=prompt, system_prompt=system)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"[fish_memory] 主动消息生成失败：{exc}")
+            return ""
+        text = (resp.completion_text or "").strip().strip('"“”')
+        return text if 2 <= len(text) <= 80 else ""
+
+    async def _maybe_proactive(self) -> None:
+        if not self._get_bool("proactive_enable", True):
+            return
+        st = self._owner_state()
+        umo = str(st.get("umo") or "")
+        if not umo:
+            return
+        now = time.time()
+        if not self._in_window(now):
+            return
+
+        today = time.strftime("%Y-%m-%d")
+        if st.get("day") != today:
+            st["day"] = today
+            st["day_count"] = 0
+        if int(st.get("day_count") or 0) >= max(1, self._get_int("proactive_daily_max", 2)):
+            return
+
+        last_user = float(st.get("last_user_ts") or 0)
+        last_bot = float(st.get("last_bot_ts") or 0)
+        if not last_user and not last_bot:
+            return
+        idle = now - max(last_user, last_bot)
+        followup_minutes = max(5, self._get_int("followup_idle_minutes", 30))
+        kind = ""
+        if last_bot > last_user and idle >= followup_minutes * 60:
+            if st.get("followup_for") != last_bot and random.random() < 0.6:
+                kind = "followup"
+        elif idle >= max(1, self._get_int("proactive_idle_hours", 3)) * 3600:
+            if random.random() < 0.5:
+                kind = "open"
+        if not kind:
+            return
+
+        text = await self._generate_proactive(kind, int(idle // 60))
+        if not text:
+            return
+        if not await self._send_proactive(umo, text):
+            return
+        st["day_count"] = int(st.get("day_count") or 0) + 1
+        st["last_proactive_ts"] = now
+        if kind == "followup":
+            st["followup_for"] = last_bot
+        self._save_state()
+        logger.info(f"[fish_memory] 主动消息（{kind}）：{text[:30]}")
+
+    def _ensure_proactive_task(self) -> None:
+        if not self._get_bool("proactive_enable", True):
+            return
+        if self._proactive_task is None or self._proactive_task.done():
+            self._proactive_task = asyncio.create_task(self._proactive_loop())
+
+    async def _proactive_loop(self) -> None:
+        while True:
+            await asyncio.sleep(300)
+            try:
+                await self._maybe_proactive()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"[fish_memory] 主动搭话异常：{exc}")
     # ---------- 命令 ----------
 
     @filter.command("记忆簿", alias={"鱼忆"}, desc="查看这个会话记住了什么（仅主人）")
@@ -685,5 +841,7 @@ class FishMemoryPlugin(Star):
     async def terminate(self) -> None:
         if self._worker and not self._worker.done():
             self._worker.cancel()
+        if self._proactive_task and not self._proactive_task.done():
+            self._proactive_task.cancel()
         self._save_state()
         logger.info("[fish_memory] 插件已停止")
