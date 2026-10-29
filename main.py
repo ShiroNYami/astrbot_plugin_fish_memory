@@ -58,7 +58,7 @@ def strip_emoji(text: str) -> str:
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.10.0",
+    "v0.10.1",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -551,8 +551,9 @@ class FishMemoryPlugin(Star):
                 f"你上次说完话后，他已经 {idle_minutes} 分钟没回你了。\n"
                 f"他最后说的是：{st.get('last_user_text', '')}\n"
                 f"你说的是：{st.get('last_bot_text', '')}\n\n"
-                "你有点在意、有点不安，想试探一下他的情绪。写一句发过去，20 字以内："
-                "可以嘴硬、可以装作随口问，但别卑微、别质问、别连发。只输出这句话。"
+                "想想你们刚才说到哪、你当时是什么情绪——可能是话没说完、有点在意，"
+                "也可能只是突然想起一件事。顺着那个情绪再发一句，30 字以内，"
+                "像平时聊天那样。只输出这句话。"
             )
         else:
             entries = [m for m in self.store.load(st.get("umo", "")) if not m.get("superseded")][-5:]
