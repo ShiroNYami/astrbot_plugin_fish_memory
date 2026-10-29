@@ -58,7 +58,7 @@ def strip_emoji(text: str) -> str:
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.10.1",
+    "v0.10.2",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -597,12 +597,14 @@ class FishMemoryPlugin(Star):
             return
         idle = now - max(last_user, last_bot)
         followup_minutes = max(5, self._get_int("followup_idle_minutes", 30))
+        followup_chance = max(0, min(100, self._get_int("followup_chance_percent", 60))) / 100
+        open_chance = max(0, min(100, self._get_int("open_chance_percent", 50))) / 100
         kind = ""
         if last_bot > last_user and idle >= followup_minutes * 60:
-            if st.get("followup_for") != last_bot and random.random() < 0.6:
+            if st.get("followup_for") != last_bot and random.random() < followup_chance:
                 kind = "followup"
         elif idle >= max(1, self._get_int("proactive_idle_hours", 3)) * 3600:
-            if random.random() < 0.5:
+            if random.random() < open_chance:
                 kind = "open"
         if not kind:
             return

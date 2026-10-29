@@ -125,6 +125,18 @@
     "hint": "默认 1 点（次日）。设为 1 表示 10:00–01:00。",
     "default": 1
   },
+  "followup_chance_percent": {
+    "type": "int",
+    "description": "追问概率（%）",
+    "hint": "满足追问条件时，实际发出去的概率。默认 60。填 100 就是每次都追。",
+    "default": 60
+  },
+  "open_chance_percent": {
+    "type": "int",
+    "description": "主动开口概率（%）",
+    "hint": "满足主动开口条件时，实际发出去的概率。默认 50。",
+    "default": 50
+  },
   "followup_idle_minutes": {
     "type": "int",
     "description": "多久没回就追问（分钟）",
