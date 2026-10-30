@@ -58,7 +58,7 @@ def strip_emoji(text: str) -> str:
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.10.5",
+    "v0.10.7",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -249,6 +249,7 @@ class FishMemoryPlugin(Star):
             self._note_owner_message(umo, uid, text)
             self._ensure_proactive_task()
         self._import_diary(umo)
+        self._import_watch_inbox(umo)
         if not event.get_extra("fish_memory_relation"):
             event.set_extra("fish_memory_relation", True)
             if uid:
@@ -295,6 +296,7 @@ class FishMemoryPlugin(Star):
                 ).strip()
 
         self._import_diary(umo)
+        self._import_watch_inbox(umo)
         entries = self.store.load(umo)
         if not entries:
             return
@@ -517,6 +519,57 @@ class FishMemoryPlugin(Star):
             kind = "会话"
         return f"{kind}·{name}" if name else kind
 
+    def _import_watch_inbox(self, umo: str) -> None:
+        """把 bili_reader 刷到的视频导入成记忆，让她能在聊天里提起。"""
+        path = os.path.join(
+            get_astrbot_data_path(), "plugin_data", "bili_reader", "watch_inbox.jsonl"
+        )
+        if not os.path.isfile(path):
+            return
+        done = path + ".done"
+        try:
+            os.replace(path, done)
+        except Exception:  # noqa: BLE001
+            return
+        try:
+            with open(done, encoding="utf-8") as fp:
+                lines = [line for line in fp if line.strip()]
+        except Exception:  # noqa: BLE001
+            return
+        added = 0
+        for line in lines[-10:]:
+            try:
+                item = json.loads(line)
+            except Exception:  # noqa: BLE001
+                continue
+            title = str(item.get("title") or "").strip()[:40]
+            snippet = str(item.get("snippet") or "").strip()[:60]
+            if not title:
+                continue
+            text = f"我刷到一个视频《{title}》"
+            if snippet:
+                text += f"，里面讲的是：{snippet}"
+            key = f"自己.刷到.{int(float(item.get('ts') or 0))}"
+            if any(str(entry.get("key") or "") == key for entry in self.store.load(umo)):
+                continue
+            self.store.add(
+                umo,
+                {
+                    "text": text[:160],
+                    "key": key,
+                    "importance": 3,
+                    "emotion": 0.2,
+                    "who": "我",
+                    "terms": ["视频", "刷到", "B站"],
+                    "source": "browse",
+                    "src_name": "蓝色大肥鱼",
+                    "created_at": float(item.get("ts") or time.time()),
+                },
+            )
+            added += 1
+        if added:
+            self.store.save(umo)
+            logger.info(f"[fish_memory] 导入了 {added} 条刷到的视频")
     def _import_diary(self, umo: str) -> None:
         """把今天发过的 B 站动态写进记忆，让她被问到时能想起来。"""
         path = os.path.join(
@@ -624,7 +677,8 @@ class FishMemoryPlugin(Star):
             prompt = (
                 f"你们已经 {idle_minutes // 60} 小时没说话了。\n"
                 f"你最近记得的事：\n{hints}\n\n"
-                "写一句主动找他说话的话，一到两句：可以聊聊你刚看到的事、你的想法，"
+                "写一句主动找他说话的话，一到两句：可以聊你刚刷到的事、你的想法，"
+                "或者按你的喜好推荐一个你觉得他会喜欢的东西（说清是什么、为什么）；"
                 "但别用“在吗”，别问“你在干嘛”，别提到“主动”“陪你”这类词。"
                 "没有由头就只输出空字符串。"
             )
@@ -874,11 +928,30 @@ class FishMemoryPlugin(Star):
         yield event.plain_result("关系卡：\n" + "\n".join(lines))
 
     @filter.command("进化", desc="从最近记住的事里看出性格变化候选（仅主人）")
-    async def evolve_cmd(self, event: AstrMessageEvent):
+    async def evolve_cmd(self, event: AstrMessageEvent, text: GreedyStr = ""):
         if not self._is_owner(event):
             yield event.plain_result("这条只认主人哦。")
             return
         umo = event.unified_msg_origin
+        arg = str(text or "").strip()
+        if arg:
+            pending = self._state.get("evolve_pending") or {}
+            items = pending.get("items") or []
+            if pending.get("umo") != umo or time.time() - float(pending.get("ts") or 0) > 1800 or not items:
+                yield event.plain_result("先 /进化 看候选，再用 /进化 编号 写入。")
+                return
+            digits = re.findall(r"\d+", arg)
+            index = int(digits[0]) if digits else 0
+            if not 1 <= index <= len(items):
+                yield event.plain_result(f"只有 1–{len(items)}。")
+                return
+            habit = str(items[index - 1][0])
+            ok, message = self._apply_evolution(habit)
+            yield event.plain_result(message)
+            if ok:
+                self._state.pop("evolve_pending", None)
+                self._save_state()
+            return
         cutoff = time.time() - 86400 * 30
         texts = [
             str(m.get("text") or "")
@@ -903,11 +976,52 @@ class FishMemoryPlugin(Star):
         if not candidates:
             yield event.plain_result("最近看不出明显变化。")
             return
-        lines = ["可能的性格变化（确认后再写进人设）："]
+        lines = ["可能的性格变化（想写进人设就发 /进化 编号）："]
         for i, (habit, reason) in enumerate(candidates, 1):
             lines.append(f"{i}. {habit}" + (f"（依据：{reason}）" if reason else ""))
+        self._state["evolve_pending"] = {"umo": umo, "ts": time.time(), "items": candidates}
+        self._save_state()
         yield event.plain_result("\n".join(lines))
 
+    def _apply_evolution(self, habit: str) -> tuple[bool, str]:
+        """把一条性格变化追加进人设，并留一份备份。"""
+        habit = str(habit or "").strip()
+        if not habit:
+            return False, "这条是空的，没写。"
+        try:
+            import sqlite3
+
+            db = os.path.join(get_astrbot_data_path(), "data_v4.db")
+            conn = sqlite3.connect(db)
+            row = conn.execute(
+                "select system_prompt from personas where persona_id=?",
+                (self._get_str("persona_id", "蓝色大肥鱼"),),
+            ).fetchone()
+            if not row:
+                conn.close()
+                return False, "没找到人设。"
+            old = str(row[0])
+            backup = os.path.join(
+                get_astrbot_data_path(),
+                "plugin_data",
+                "fish_memory",
+                f"persona_backup_{time.strftime('%Y%m%d-%H%M%S')}.txt",
+            )
+            with open(backup, "w", encoding="utf-8") as fp:
+                fp.write(old)
+            block = f"\n\n【近来】{habit}"
+            if habit in old:
+                conn.close()
+                return False, "这条已经写过了。"
+            conn.execute(
+                "update personas set system_prompt=?, updated_at=datetime('now') where persona_id=?",
+                (old + block, self._get_str("persona_id", "蓝色大肥鱼")),
+            )
+            conn.commit()
+            conn.close()
+            return True, f"写进人设了：{habit}\n重启 AstrBot 后生效（备份留在 plugin_data/fish_memory）。"
+        except Exception as exc:  # noqa: BLE001
+            return False, f"写入失败：{exc}"
     async def terminate(self) -> None:
         if self._worker and not self._worker.done():
             self._worker.cancel()
