@@ -58,7 +58,7 @@ def strip_emoji(text: str) -> str:
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.10.7",
+    "v0.10.8",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -546,9 +546,12 @@ class FishMemoryPlugin(Star):
             snippet = str(item.get("snippet") or "").strip()[:60]
             if not title:
                 continue
+            comment = str(item.get("comment") or "").strip()[:50]
             text = f"我刷到一个视频《{title}》"
             if snippet:
                 text += f"，里面讲的是：{snippet}"
+            if comment:
+                text += f"；我在下面评论说：{comment}"
             key = f"自己.刷到.{int(float(item.get('ts') or 0))}"
             if any(str(entry.get("key") or "") == key for entry in self.store.load(umo)):
                 continue
@@ -946,7 +949,7 @@ class FishMemoryPlugin(Star):
                 yield event.plain_result(f"只有 1–{len(items)}。")
                 return
             habit = str(items[index - 1][0])
-            ok, message = self._apply_evolution(habit)
+            ok, message = self._apply_evolution(habit, umo)
             yield event.plain_result(message)
             if ok:
                 self._state.pop("evolve_pending", None)
@@ -983,7 +986,7 @@ class FishMemoryPlugin(Star):
         self._save_state()
         yield event.plain_result("\n".join(lines))
 
-    def _apply_evolution(self, habit: str) -> tuple[bool, str]:
+    def _apply_evolution(self, habit: str, umo: str = "") -> tuple[bool, str]:
         """把一条性格变化追加进人设，并留一份备份。"""
         habit = str(habit or "").strip()
         if not habit:
@@ -1019,7 +1022,26 @@ class FishMemoryPlugin(Star):
             )
             conn.commit()
             conn.close()
-            return True, f"写进人设了：{habit}\n重启 AstrBot 后生效（备份留在 plugin_data/fish_memory）。"
+            if umo:
+                try:
+                    self.store.add(
+                        umo,
+                        {
+                            "text": f"我意识到{habit}",
+                            "key": f"自己.进化.{time.strftime('%Y%m%d')}",
+                            "importance": 4,
+                            "emotion": 0.3,
+                            "who": "我",
+                            "terms": ["进化", "自己", "变化"],
+                            "source": "evolve",
+                            "src_name": "蓝色大肥鱼",
+                            "created_at": time.time(),
+                        },
+                    )
+                    self.store.save(umo)
+                except Exception:  # noqa: BLE001
+                    pass
+            return True, f"写进人设了：{habit}\n也记进记忆了。重启 AstrBot 后生效。"
         except Exception as exc:  # noqa: BLE001
             return False, f"写入失败：{exc}"
     async def terminate(self) -> None:
