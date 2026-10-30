@@ -58,7 +58,7 @@ def strip_emoji(text: str) -> str:
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.10.9",
+    "v0.10.11",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -547,11 +547,19 @@ class FishMemoryPlugin(Star):
             if not title:
                 continue
             comment = str(item.get("comment") or "").strip()[:50]
-            text = f"我刷到一个视频《{title}》"
-            if snippet:
-                text += f"，里面讲的是：{snippet}"
-            if comment:
-                text += f"；我在下面评论说：{comment}"
+            if str(item.get("kind") or "comment") == "reply":
+                their = str(item.get("their") or "").strip()[:40]
+                text = f"我在视频《{title}》下面回复了别人"
+                if their:
+                    text += f"（他说：{their}）"
+                if comment:
+                    text += f"：{comment}"
+            else:
+                text = f"我刷到一个视频《{title}》"
+                if snippet:
+                    text += f"，里面讲的是：{snippet}"
+                if comment:
+                    text += f"；我在下面评论说：{comment}"
             key = f"自己.刷到.{int(float(item.get('ts') or 0))}"
             if any(str(entry.get("key") or "") == key for entry in self.store.load(umo)):
                 continue
@@ -1030,7 +1038,8 @@ class FishMemoryPlugin(Star):
             )
             with open(backup, "w", encoding="utf-8") as fp:
                 fp.write(old)
-            block = f"\n\n【近来】{habit}"
+            raw = habit[1:] if habit.startswith("她") else habit
+            block = f"\n\n【近来】你{raw}"
             if habit in old:
                 conn.close()
                 return False, "这条已经写过了。"
@@ -1045,7 +1054,7 @@ class FishMemoryPlugin(Star):
                     self.store.add(
                         umo,
                         {
-                            "text": f"我意识到{habit}",
+                            "text": f"我{raw}",
                             "key": f"自己.进化.{time.strftime('%Y%m%d')}",
                             "importance": 4,
                             "emotion": 0.3,
