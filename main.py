@@ -58,7 +58,7 @@ def strip_emoji(text: str) -> str:
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.10.11",
+    "v0.10.12",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -549,7 +549,10 @@ class FishMemoryPlugin(Star):
             comment = str(item.get("comment") or "").strip()[:50]
             if str(item.get("kind") or "comment") == "reply":
                 their = str(item.get("their") or "").strip()[:40]
-                text = f"我在视频《{title}》下面回复了别人"
+                if title == "我的B站动态":
+                    text = "我在自己的动态下面回复了别人"
+                else:
+                    text = f"我在视频《{title}》下面回复了别人"
                 if their:
                     text += f"（他说：{their}）"
                 if comment:
