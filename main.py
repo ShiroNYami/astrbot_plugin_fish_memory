@@ -58,7 +58,7 @@ def strip_emoji(text: str) -> str:
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.10.3",
+    "v0.10.5",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -243,9 +243,12 @@ class FishMemoryPlugin(Star):
             return
 
         uid, name = self._sender(event)
+        st_owner = self._owner_state()
+        prev_text = str(st_owner.get("last_user_text") or "")
         if uid and self._is_owner_uid(uid):
             self._note_owner_message(umo, uid, text)
             self._ensure_proactive_task()
+        self._import_diary(umo)
         if not event.get_extra("fish_memory_relation"):
             event.set_extra("fish_memory_relation", True)
             if uid:
@@ -260,10 +263,38 @@ class FishMemoryPlugin(Star):
             if identity:
                 req.prompt = ((req.prompt or "") + "\n\n" + identity).strip()
 
-        # 纯图片 / 表情消息没有文本，认完人就够了
+        # 纯图片 / 表情消息没有文本，认完人就够了；但要记住「上一条是图」
         if not text:
+            try:
+                has_image = any(
+                    getattr(seg, "type", "") in ("image", "face")
+                    for seg in (getattr(event.message_obj, "message", None) or [])
+                )
+            except Exception:  # noqa: BLE001
+                has_image = False
+            if has_image and uid and self._is_owner_uid(uid):
+                self._owner_state()["last_user_kind"] = "image"
             return
+        if uid and self._is_owner_uid(uid):
+            self._owner_state()["last_user_kind"] = "text"
 
+        # 只 @ 一句、或者接着上一条说话时，把上一条一起给它看
+        stripped = text.strip()
+        if 0 < len(stripped) <= 8 and (
+            "@" in stripped or stripped in ("什么事", "干嘛", "点我干嘛", "叫我干嘛", "？", "?")
+        ):
+            if prev_text:
+                req.prompt = (
+                    (req.prompt or "")
+                    + f"\n\n【他上一条说的是：{prev_text[:80]}。这条只是 @ 你或接着上文，别当成新话题】"
+                ).strip()
+            elif str(st_owner.get("last_user_kind") or "") == "image":
+                req.prompt = (
+                    (req.prompt or "")
+                    + "\n\n【他上一条发的是一张图片，这条只是 @ 你：接着那张图说，别当成新话题】"
+                ).strip()
+
+        self._import_diary(umo)
         entries = self.store.load(umo)
         if not entries:
             return
@@ -486,6 +517,38 @@ class FishMemoryPlugin(Star):
             kind = "会话"
         return f"{kind}·{name}" if name else kind
 
+    def _import_diary(self, umo: str) -> None:
+        """把今天发过的 B 站动态写进记忆，让她被问到时能想起来。"""
+        path = os.path.join(
+            get_astrbot_data_path(), "plugin_data", "bili_reader", "diary_state.json"
+        )
+        try:
+            with open(path, encoding="utf-8") as fp:
+                data = json.load(fp)
+        except Exception:  # noqa: BLE001
+            return
+        day = str(data.get("day") or "")
+        text = str(data.get("text") or "").strip()
+        if not text or day != time.strftime("%Y-%m-%d"):
+            return
+        key = f"自己.动态.{day}"
+        if any(str(entry.get("key") or "") == key for entry in self.store.load(umo)):
+            return
+        self.store.add(
+            umo,
+            {
+                "text": f"我在B站发了一条动态：{text}",
+                "key": key,
+                "importance": 4,
+                "emotion": 0.3,
+                "who": "我",
+                "terms": ["动态", "B站", "自己"],
+                "source": "diary",
+                "src_name": "蓝色大肥鱼",
+                "created_at": time.time(),
+            },
+        )
+        self.store.save(umo)
     # ---------- 主动搭话 ----------
 
     def _owner_state(self) -> dict:
