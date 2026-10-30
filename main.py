@@ -58,7 +58,7 @@ def strip_emoji(text: str) -> str:
     "astrbot_plugin_fish_memory",
     "byakuya",
     "给 QQ 聊天加一份会淡忘的长期记忆：该记的记下来，想起时自己会想起，不重要的慢慢淡掉。",
-    "v0.10.8",
+    "v0.10.9",
     "https://github.com/ShiroNYami/astrbot_plugin_fish_memory",
 )
 class FishMemoryPlugin(Star):
@@ -737,6 +737,24 @@ class FishMemoryPlugin(Star):
             return
         if not await self._send_proactive(umo, text):
             return
+        try:
+            self.store.add(
+                umo,
+                {
+                    "text": f"我主动跟他说：{text}",
+                    "key": f"自己.主动.{int(now)}",
+                    "importance": 2,
+                    "emotion": 0.4,
+                    "who": "我",
+                    "terms": ["主动", "说", "自己"],
+                    "source": "proactive",
+                    "src_name": "蓝色大肥鱼",
+                    "created_at": now,
+                },
+            )
+            self.store.save(umo)
+        except Exception:  # noqa: BLE001
+            pass
         st["day_count"] = int(st.get("day_count") or 0) + 1
         st["last_proactive_ts"] = now
         if kind == "followup":
