@@ -125,6 +125,12 @@
     "hint": "默认 1 点（次日）。设为 1 表示 10:00–01:00。",
     "default": 1
   },
+  "followup_max_per_thread": {
+    "type": "int",
+    "description": "同一由头最多追问几次",
+    "hint": "同一次沉默里最多追几条。默认 6，但仍受“每天最多主动几次”限制。",
+    "default": 6
+  },
   "followup_chance_percent": {
     "type": "int",
     "description": "追问概率（%）",

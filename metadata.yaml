@@ -8,7 +8,7 @@ desc: >-
 help: >-
   /记忆簿 查看、/删记忆 3 删除、/记忆开关 开关当前会话、/关系卡 看关系、/进化 看性格变化候选。
   首次使用前，在 AstrBot 插件配置里确认开关和 provider。
-version: v0.10.2
+version: v0.10.3
 author: byakuya
 repo: https://github.com/ShiroNYami/astrbot_plugin_fish_memory
 astrbot_version: ">=4.16,<5"
